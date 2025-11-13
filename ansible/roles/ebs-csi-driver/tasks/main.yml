@@ -1,0 +1,38 @@
+# ansible/roles/ebs-csi-driver/tasks/main.yml
+# Purpose: Install and configure AWS EBS CSI Driver for persistent volumes
+
+---
+- name: Check if EBS CSI Driver is already installed
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: ebs-csi-node
+    namespace: kube-system
+  register: ebs_csi_check
+  failed_when: false
+
+- name: Get cluster OIDC provider
+  command: |
+    aws eks describe-cluster \
+      --name {{ cluster_name }} \
+      --region {{ aws_region }} \
+      --query "cluster.identity.oidc.issuer" \
+      --output text
+  register: oidc_provider
+  changed_when: false
+
+- name: Install EBS CSI Driver prerequisites
+  include_tasks: prerequisites.yml
+
+- name: Install EBS CSI Driver
+  include_tasks: install.yml
+  when: ebs_csi_check.resources | length == 0 or ebs_csi_force_install | default(false)
+
+- name: Configure storage classes
+  include_tasks: storage_classes.yml
+  when: ebs_csi_create_storage_classes | default(true)
+
+- name: Test EBS CSI Driver
+  include_tasks: test.yml
+  when: ebs_csi_test_installation | default(false)
+  

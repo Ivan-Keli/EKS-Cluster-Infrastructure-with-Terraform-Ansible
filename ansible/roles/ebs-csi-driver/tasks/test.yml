@@ -1,0 +1,99 @@
+# ansible/roles/ebs-csi-driver/tasks/test.yml
+# Purpose: Test EBS CSI Driver functionality
+
+---
+- name: Create test namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: ebs-test
+
+- name: Create test PVC
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ebs-test-pvc
+        namespace: ebs-test
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 1Gi
+
+- name: Wait for PVC to be bound
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: ebs-test-pvc
+    namespace: ebs-test
+    wait: true
+    wait_condition:
+      type: Bound
+      status: "True"
+    wait_timeout: 120
+  register: pvc_status
+
+- name: Create test pod using PVC
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: ebs-test-pod
+        namespace: ebs-test
+      spec:
+        containers:
+        - name: test-container
+          image: busybox:latest
+          command: ["/bin/sh"]
+          args: ["-c", "echo 'EBS CSI test successful' > /data/test.txt && sleep 3600"]
+          volumeMounts:
+          - mountPath: "/data"
+            name: test-volume
+        volumes:
+        - name: test-volume
+          persistentVolumeClaim:
+            claimName: ebs-test-pvc
+
+- name: Wait for test pod to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    name: ebs-test-pod
+    namespace: ebs-test
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 120
+
+- name: Verify data written to volume
+  kubernetes.core.k8s_exec:
+    namespace: ebs-test
+    pod: ebs-test-pod
+    command: cat /data/test.txt
+  register: test_output
+
+- name: Display test results
+  debug:
+    msg: 
+      - "EBS CSI Driver test completed successfully"
+      - "Test output: {{ test_output.stdout }}"
+
+- name: Clean up test resources
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: ebs-test
+  when: ebs_csi_cleanup_test | default(true)
+  

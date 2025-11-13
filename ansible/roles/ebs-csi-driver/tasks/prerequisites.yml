@@ -1,0 +1,63 @@
+# ansible/roles/ebs-csi-driver/tasks/prerequisites.yml
+# Purpose: Set up prerequisites for EBS CSI Driver
+
+---
+- name: Check if IAM OIDC provider exists
+  command: |
+    aws iam list-open-id-connect-providers \
+      --region {{ aws_region }} \
+      --output json
+  register: oidc_providers
+  changed_when: false
+
+- name: Parse OIDC provider URL
+  set_fact:
+    oidc_url: "{{ oidc_provider.stdout | replace('https://', '') }}"
+
+- name: Create IAM policy for EBS CSI Driver
+  amazon.aws.iam_managed_policy:
+    policy_name: "{{ ebs_csi_iam_policy_name }}"
+    policy: "{{ lookup('file', 'files/ebs-csi-policy.json') }}"
+    state: present
+  when: ebs_csi_create_iam_policy | default(false)
+
+- name: Create IAM service account for EBS CSI Driver
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: ebs-csi-controller-sa
+        namespace: kube-system
+        annotations:
+          eks.amazonaws.com/role-arn: "{{ ebs_csi_driver_role_arn }}"
+
+- name: Install Helm if not present
+  block:
+    - name: Check if Helm is installed
+      command: which helm
+      register: helm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Helm
+      shell: |
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        ./get_helm.sh
+      args:
+        creates: /usr/local/bin/helm
+      when: helm_check.rc != 0
+      become: yes
+
+- name: Add AWS EBS CSI Driver Helm repository
+  kubernetes.core.helm_repository:
+    name: aws-ebs-csi-driver
+    repo_url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+    state: present
+
+- name: Update Helm repositories
+  command: helm repo update
+  changed_when: false
+  

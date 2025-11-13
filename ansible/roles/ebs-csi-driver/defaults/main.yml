@@ -1,0 +1,58 @@
+# ansible/roles/ebs-csi-driver/defaults/main.yml
+# Purpose: Default variables for EBS CSI Driver role
+
+---
+# Installation options
+ebs_csi_force_install: false
+ebs_csi_test_installation: false
+ebs_csi_cleanup_test: true
+
+# AWS Configuration
+aws_region: "us-east-1"
+cluster_name: "eks-cluster-dev"
+
+# IAM Configuration
+ebs_csi_driver_role_arn: ""  # Should be provided by Terraform output
+ebs_csi_iam_policy_name: "AmazonEKS_EBS_CSI_Driver_Policy"
+ebs_csi_create_iam_policy: false  # Set to true if not created by Terraform
+
+# Image configuration
+ebs_csi_image_repository: "public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver"
+ebs_csi_image_tag: "v1.24.0"
+ebs_csi_image_pull_policy: "IfNotPresent"
+
+# Controller configuration
+ebs_csi_controller_replicas: 2
+ebs_csi_controller_cpu_limit: "500m"
+ebs_csi_controller_memory_limit: "256Mi"
+ebs_csi_controller_cpu_request: "100m"
+ebs_csi_controller_memory_request: "128Mi"
+
+# Node configuration
+ebs_csi_node_cpu_limit: "200m"
+ebs_csi_node_memory_limit: "256Mi"
+ebs_csi_node_cpu_request: "50m"
+ebs_csi_node_memory_request: "64Mi"
+
+# Snapshot controller
+ebs_csi_snapshot_controller: true
+ebs_csi_snapshot_cpu_limit: "200m"
+ebs_csi_snapshot_memory_limit: "128Mi"
+ebs_csi_snapshot_cpu_request: "50m"
+ebs_csi_snapshot_memory_request: "64Mi"
+
+# Features
+ebs_csi_volume_modification: true
+ebs_csi_volume_stats: true
+ebs_csi_enable_snapshots: true
+ebs_csi_log_level: "2"  # 0-5, higher is more verbose
+
+# Storage class configuration
+ebs_csi_create_storage_classes: true
+ebs_csi_gp3_default: true
+ebs_csi_create_io2_class: false
+ebs_csi_snapshot_class: true
+ebs_csi_fstype: "ext4"
+ebs_csi_encrypted: "true"
+ebs_csi_reclaim_policy: "Delete"
+ebs_csi_volume_binding_mode: "WaitForFirstConsumer"

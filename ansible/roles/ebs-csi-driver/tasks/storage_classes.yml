@@ -1,0 +1,90 @@
+# ansible/roles/ebs-csi-driver/tasks/storage_classes.yml
+# Purpose: Create storage classes for different use cases
+
+---
+- name: Create GP3 storage class (default)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: gp3
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "{{ ebs_csi_gp3_default | string | lower }}"
+      provisioner: ebs.csi.aws.com
+      parameters:
+        type: gp3
+        csi.storage.k8s.io/fstype: "{{ ebs_csi_fstype }}"
+        encrypted: "{{ ebs_csi_encrypted | string | lower }}"
+      reclaimPolicy: "{{ ebs_csi_reclaim_policy }}"
+      volumeBindingMode: "{{ ebs_csi_volume_binding_mode }}"
+      allowVolumeExpansion: true
+
+- name: Create GP2 storage class
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: gp2
+      provisioner: ebs.csi.aws.com
+      parameters:
+        type: gp2
+        csi.storage.k8s.io/fstype: "{{ ebs_csi_fstype }}"
+        encrypted: "{{ ebs_csi_encrypted | string | lower }}"
+      reclaimPolicy: "{{ ebs_csi_reclaim_policy }}"
+      volumeBindingMode: "{{ ebs_csi_volume_binding_mode }}"
+      allowVolumeExpansion: true
+
+- name: Create high-performance io2 storage class
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: io2-high-performance
+      provisioner: ebs.csi.aws.com
+      parameters:
+        type: io2
+        iopsPerGB: "50"
+        csi.storage.k8s.io/fstype: "{{ ebs_csi_fstype }}"
+        encrypted: "{{ ebs_csi_encrypted | string | lower }}"
+      reclaimPolicy: Retain
+      volumeBindingMode: "{{ ebs_csi_volume_binding_mode }}"
+      allowVolumeExpansion: true
+  when: ebs_csi_create_io2_class | default(false)
+
+- name: Create storage class with snapshot support
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: gp3-snapshot
+      provisioner: ebs.csi.aws.com
+      parameters:
+        type: gp3
+        csi.storage.k8s.io/fstype: "{{ ebs_csi_fstype }}"
+        encrypted: "{{ ebs_csi_encrypted | string | lower }}"
+      reclaimPolicy: Retain
+      volumeBindingMode: "{{ ebs_csi_volume_binding_mode }}"
+      allowVolumeExpansion: true
+
+- name: Create VolumeSnapshotClass for EBS
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: snapshot.storage.k8s.io/v1
+      kind: VolumeSnapshotClass
+      metadata:
+        name: ebs-snapshot-class
+        annotations:
+          snapshot.storage.kubernetes.io/is-default-class: "true"
+      driver: ebs.csi.aws.com
+      deletionPolicy: Delete
+  when: ebs_csi_snapshot_class | default(true)
+  

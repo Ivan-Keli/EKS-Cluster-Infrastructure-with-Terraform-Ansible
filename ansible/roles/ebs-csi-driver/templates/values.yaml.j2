@@ -1,0 +1,129 @@
+# ansible/roles/ebs-csi-driver/templates/values.yaml.j2
+# Purpose: Helm values for EBS CSI Driver
+
+# Image configuration
+image:
+  repository: {{ ebs_csi_image_repository }}
+  tag: {{ ebs_csi_image_tag }}
+  pullPolicy: {{ ebs_csi_image_pull_policy }}
+
+# Controller configuration
+controller:
+  replicaCount: {{ ebs_csi_controller_replicas }}
+  
+  serviceAccount:
+    create: true
+    name: ebs-csi-controller-sa
+    annotations:
+      eks.amazonaws.com/role-arn: {{ ebs_csi_driver_role_arn }}
+  
+  resources:
+    limits:
+      cpu: {{ ebs_csi_controller_cpu_limit }}
+      memory: {{ ebs_csi_controller_memory_limit }}
+    requests:
+      cpu: {{ ebs_csi_controller_cpu_request }}
+      memory: {{ ebs_csi_controller_memory_request }}
+  
+  # Volume modification
+  volumeModificationFeature:
+    enabled: {{ ebs_csi_volume_modification | bool }}
+  
+  # Logging
+  logLevel: {{ ebs_csi_log_level }}
+  
+  # AWS region
+  region: {{ aws_region }}
+  
+  # Enable volume scheduling
+  extraCreateMetadata: true
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    minAvailable: 1
+
+# Node configuration
+node:
+  serviceAccount:
+    create: true
+    name: ebs-csi-node-sa
+    annotations:
+      eks.amazonaws.com/role-arn: {{ ebs_csi_driver_role_arn }}
+  
+  resources:
+    limits:
+      cpu: {{ ebs_csi_node_cpu_limit }}
+      memory: {{ ebs_csi_node_memory_limit }}
+    requests:
+      cpu: {{ ebs_csi_node_cpu_request }}
+      memory: {{ ebs_csi_node_memory_request }}
+  
+  tolerations:
+    - operator: Exists
+  
+  # Volume stats
+  volumeStatsAggregatorFeature:
+    enabled: {{ ebs_csi_volume_stats | bool }}
+  
+  logLevel: {{ ebs_csi_log_level }}
+
+# Snapshot controller
+snapshotController:
+  enabled: {{ ebs_csi_snapshot_controller | bool }}
+  
+  resources:
+    limits:
+      cpu: {{ ebs_csi_snapshot_cpu_limit }}
+      memory: {{ ebs_csi_snapshot_memory_limit }}
+    requests:
+      cpu: {{ ebs_csi_snapshot_cpu_request }}
+      memory: {{ ebs_csi_snapshot_memory_request }}
+
+# Storage classes
+storageClasses:
+  - name: gp3
+    annotations:
+      storageclass.kubernetes.io/is-default-class: "true"
+    parameters:
+      type: gp3
+      csi.storage.k8s.io/fstype: ext4
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+
+# Enable topology awareness
+enableTopology: true
+
+# Enable volume resizing
+enableVolumeResizing: true
+
+# Enable volume snapshot
+enableVolumeSnapshot: {{ ebs_csi_enable_snapshots | bool }}
+
+# Node selector
+nodeSelector: {}
+
+# Affinity
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux
+        - key: node.kubernetes.io/instance-type
+          operator: NotIn
+          values:
+          - t3.nano
+          - t2.nano
+
+# Priority class
+priorityClassName: system-cluster-critical
+
+# Update strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    

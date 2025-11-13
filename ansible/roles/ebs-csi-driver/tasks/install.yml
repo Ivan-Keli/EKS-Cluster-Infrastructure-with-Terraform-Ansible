@@ -1,0 +1,63 @@
+# ansible/roles/ebs-csi-driver/tasks/install.yml
+# Purpose: Install EBS CSI Driver using Helm
+
+---
+- name: Generate EBS CSI Driver values file
+  template:
+    src: values.yaml.j2
+    dest: /tmp/ebs-csi-driver-values.yaml
+    mode: '0644'
+
+- name: Install EBS CSI Driver using Helm
+  kubernetes.core.helm:
+    name: aws-ebs-csi-driver
+    chart_ref: aws-ebs-csi-driver/aws-ebs-csi-driver
+    release_namespace: kube-system
+    create_namespace: false
+    values_files:
+      - /tmp/ebs-csi-driver-values.yaml
+    wait: true
+    wait_timeout: 600
+    atomic: true
+  register: ebs_csi_install
+
+- name: Wait for EBS CSI controller to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: ebs-csi-controller
+    namespace: kube-system
+    wait: true
+    wait_condition:
+      type: Progressing
+      status: "True"
+    wait_timeout: 300
+
+- name: Wait for EBS CSI node DaemonSet to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: ebs-csi-node
+    namespace: kube-system
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 300
+
+- name: Verify EBS CSI Driver pods are running
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: kube-system
+    label_selectors:
+      - app=ebs-csi-controller
+  register: controller_pods
+
+- name: Display EBS CSI Driver status
+  debug:
+    msg: 
+      - "EBS CSI Driver installed successfully"
+      - "Controller pods: {{ controller_pods.resources | length }}"
+      - "Installation status: {{ ebs_csi_install.status | default('Unknown') }}"
+      
