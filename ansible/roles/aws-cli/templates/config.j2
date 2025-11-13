@@ -1,0 +1,28 @@
+# ansible/roles/aws-cli/templates/config.j2
+# AWS CLI configuration file
+
+[default]
+region = {{ aws_default_region | default('us-east-1') }}
+output = {{ aws_output_format | default('json') }}
+
+{% if aws_cli_pager is defined %}
+cli_pager = {{ aws_cli_pager }}
+{% endif %}
+
+{% if aws_cli_auto_prompt is defined %}
+cli_auto_prompt = {{ aws_cli_auto_prompt }}
+{% endif %}
+
+{% for profile in aws_profiles | default([]) %}
+[profile {{ profile.name }}]
+region = {{ profile.region | default(aws_default_region) }}
+output = {{ profile.output | default(aws_output_format) }}
+{% if profile.role_arn is defined %}
+role_arn = {{ profile.role_arn }}
+source_profile = {{ profile.source_profile | default('default') }}
+{% endif %}
+{% if profile.mfa_serial is defined %}
+mfa_serial = {{ profile.mfa_serial }}
+{% endif %}
+
+{% endfor %}

@@ -1,0 +1,58 @@
+# ansible/roles/kubectl/tasks/plugins.yml
+# Purpose: Install kubectl plugins using krew
+
+---
+- name: Check if krew is installed
+  stat:
+    path: "{{ ansible_env.HOME }}/.krew/bin/kubectl-krew"
+  register: krew_check
+
+- name: Install krew (kubectl plugin manager)
+  when: not krew_check.stat.exists
+  block:
+    - name: Download krew installer
+      get_url:
+        url: "https://github.com/kubernetes-sigs/krew/releases/latest/download/krew-{{ krew_os }}_{{ krew_arch }}.tar.gz"
+        dest: /tmp/krew.tar.gz
+        mode: '0644'
+
+    - name: Extract krew
+      unarchive:
+        src: /tmp/krew.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Install krew
+      command: ./krew-{{ krew_os }}_{{ krew_arch }} install krew
+      args:
+        chdir: /tmp
+      environment:
+        PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME }}/.krew/bin"
+
+    - name: Add krew to PATH
+      lineinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        line: 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"'
+        create: yes
+
+- name: Update krew index
+  command: "{{ ansible_env.HOME }}/.krew/bin/kubectl-krew update"
+  changed_when: false
+
+- name: Install kubectl plugins
+  command: "{{ ansible_env.HOME }}/.krew/bin/kubectl-krew install {{ item }}"
+  loop: "{{ kubectl_plugins }}"
+  register: plugin_install
+  changed_when: "'Installed plugin' in plugin_install.stdout"
+  failed_when: 
+    - plugin_install.rc != 0
+    - "'already installed' not in plugin_install.stderr"
+
+- name: List installed plugins
+  command: "{{ ansible_env.HOME }}/.krew/bin/kubectl-krew list"
+  register: installed_plugins
+  changed_when: false
+
+- debug:
+    msg: "Installed kubectl plugins: {{ installed_plugins.stdout_lines }}"
+    

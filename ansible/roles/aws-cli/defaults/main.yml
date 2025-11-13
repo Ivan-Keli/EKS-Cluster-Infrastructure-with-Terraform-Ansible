@@ -1,0 +1,45 @@
+# ansible/roles/aws-cli/defaults/main.yml
+# Purpose: Default variables for AWS CLI role
+
+---
+# Installation options
+aws_cli_force_install: false
+aws_cli_symlink: true
+aws_cli_configure: true
+aws_cli_test_credentials: false
+
+# AWS Configuration
+aws_default_region: "us-east-1"
+aws_output_format: "json"
+aws_cli_pager: ""
+aws_cli_auto_prompt: "off"
+
+# Credentials (should be provided via vault or environment)
+# aws_access_key_id: ""
+# aws_secret_access_key: ""
+# aws_session_token: ""
+
+# Additional profiles
+aws_profiles: []
+# Example:
+# aws_profiles:
+#   - name: production
+#     region: us-west-2
+#     role_arn: arn:aws:iam::123456789012:role/ProdRole
+#     source_profile: default
+
+aws_credential_profiles: []
+# Example:
+# aws_credential_profiles:
+#   - name: dev
+#     access_key_id: AKIAIOSFODNN7EXAMPLE
+#     secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+# Additional tools
+install_session_manager: true
+aws_additional_tools:
+  - boto3
+  - botocore
+
+# Environment specific settings
+environment: "dev"

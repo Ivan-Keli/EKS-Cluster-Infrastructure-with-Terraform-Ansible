@@ -1,0 +1,137 @@
+# ansible/roles/aws-cli/tasks/main.yml
+# Purpose: Install and configure AWS CLI v2
+
+---
+- name: Check if AWS CLI is installed
+  command: which aws
+  register: aws_cli_check
+  changed_when: false
+  failed_when: false
+
+- name: Check AWS CLI version if installed
+  command: aws --version
+  register: aws_cli_version
+  when: aws_cli_check.rc == 0
+  changed_when: false
+  failed_when: false
+
+- name: Install AWS CLI v2
+  when: 
+    - aws_cli_check.rc != 0 or aws_cli_force_install | default(false)
+    - ansible_system == "Linux"
+  block:
+    - name: Download AWS CLI v2 installer
+      get_url:
+        url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+        dest: /tmp/awscli-v2.zip
+        mode: '0644'
+
+    - name: Install unzip if not present
+      package:
+        name: unzip
+        state: present
+      become: yes
+
+    - name: Unzip AWS CLI installer
+      unarchive:
+        src: /tmp/awscli-v2.zip
+        dest: /tmp
+        remote_src: yes
+
+    - name: Install AWS CLI v2
+      command: /tmp/aws/install
+      become: yes
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Create symlink for AWS CLI
+      file:
+        src: /usr/local/bin/aws
+        dest: /usr/bin/aws
+        state: link
+      become: yes
+      when: aws_cli_symlink | default(true)
+
+- name: Configure AWS CLI
+  when: aws_cli_configure | default(true)
+  block:
+    - name: Create AWS config directory
+      file:
+        path: "{{ ansible_env.HOME }}/.aws"
+        state: directory
+        mode: '0700'
+
+    - name: Configure AWS CLI credentials
+      template:
+        src: credentials.j2
+        dest: "{{ ansible_env.HOME }}/.aws/credentials"
+        mode: '0600'
+      when: 
+        - aws_access_key_id is defined
+        - aws_secret_access_key is defined
+
+    - name: Configure AWS CLI config
+      template:
+        src: config.j2
+        dest: "{{ ansible_env.HOME }}/.aws/config"
+        mode: '0600'
+
+- name: Install Session Manager plugin
+  when: install_session_manager | default(true)
+  block:
+    - name: Download Session Manager plugin
+      get_url:
+        url: "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/linux_64bit/session-manager-plugin.rpm"
+        dest: /tmp/session-manager-plugin.rpm
+        mode: '0644'
+      when: ansible_os_family == "RedHat"
+
+    - name: Install Session Manager plugin (RedHat)
+      yum:
+        name: /tmp/session-manager-plugin.rpm
+        state: present
+      become: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Download Session Manager plugin (Debian)
+      get_url:
+        url: "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb"
+        dest: /tmp/session-manager-plugin.deb
+        mode: '0644'
+      when: ansible_os_family == "Debian"
+
+    - name: Install Session Manager plugin (Debian)
+      apt:
+        deb: /tmp/session-manager-plugin.deb
+        state: present
+      become: yes
+      when: ansible_os_family == "Debian"
+
+- name: Install additional AWS tools
+  pip:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ aws_additional_tools }}"
+  become: yes
+  when: aws_additional_tools | length > 0
+
+- name: Verify AWS CLI installation
+  command: aws --version
+  register: aws_final_version
+  changed_when: false
+
+- debug:
+    msg: "AWS CLI installed: {{ aws_final_version.stdout }}"
+
+- name: Test AWS credentials
+  command: aws sts get-caller-identity
+  register: aws_identity
+  changed_when: false
+  failed_when: false
+  when: aws_cli_test_credentials | default(false)
+
+- debug:
+    var: aws_identity.stdout
+  when: 
+    - aws_cli_test_credentials | default(false)
+    - aws_identity.rc == 0

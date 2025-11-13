@@ -1,0 +1,137 @@
+# ansible/roles/kubectl/tasks/main.yml
+# Purpose: Install and configure kubectl for Kubernetes cluster management
+
+---
+- name: Gather OS facts
+  setup:
+    gather_subset:
+      - os_family
+      - distribution
+      - distribution_version
+
+- name: Check if kubectl is already installed
+  command: which kubectl
+  register: kubectl_check
+  changed_when: false
+  failed_when: false
+
+- name: Get kubectl version if installed
+  command: kubectl version --client --short
+  register: kubectl_current_version
+  when: kubectl_check.rc == 0
+  changed_when: false
+  failed_when: false
+
+- name: Install kubectl
+  block:
+    - name: Get latest stable kubectl version
+      uri:
+        url: https://dl.k8s.io/release/stable.txt
+        return_content: true
+      register: kubectl_latest
+      when: kubectl_version == "latest"
+
+    - name: Set kubectl version
+      set_fact:
+        kubectl_install_version: "{{ kubectl_version == 'latest' | ternary(kubectl_latest.content | trim, kubectl_version) }}"
+
+    - name: Download kubectl binary
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_install_version }}/bin/linux/amd64/kubectl"
+        dest: /tmp/kubectl
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Download kubectl checksum
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_install_version }}/bin/linux/amd64/kubectl.sha256"
+        dest: /tmp/kubectl.sha256
+      delegate_to: localhost
+
+    - name: Verify kubectl binary checksum
+      shell: |
+        echo "$(<kubectl.sha256) kubectl" | sha256sum --check
+      args:
+        chdir: /tmp
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Install kubectl binary
+      copy:
+        src: /tmp/kubectl
+        dest: "{{ kubectl_install_path }}/kubectl"
+        mode: '0755'
+        owner: root
+        group: root
+      become: yes
+
+    - name: Verify kubectl installation
+      command: kubectl version --client
+      register: kubectl_verify
+      changed_when: false
+
+- name: Install kubectl bash completion
+  when: kubectl_bash_completion | default(true)
+  block:
+    - name: Check if bash-completion is installed
+      package:
+        name: bash-completion
+        state: present
+      become: yes
+      when: ansible_os_family in ['RedHat', 'Debian']
+
+    - name: Generate kubectl bash completion
+      shell: kubectl completion bash > /etc/bash_completion.d/kubectl
+      become: yes
+      changed_when: false
+
+- name: Configure kubectl for EKS cluster
+  when: configure_eks | default(false)
+  block:
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0700'
+
+    - name: Update kubeconfig for EKS
+      shell: |
+        aws eks update-kubeconfig \
+          --region {{ aws_region | default('us-east-1') }} \
+          --name {{ cluster_name }} \
+          --kubeconfig {{ kubeconfig_path | default(ansible_env.HOME + '/.kube/config') }}
+      environment:
+        AWS_PROFILE: "{{ aws_profile | default('default') }}"
+      register: kubeconfig_update
+      changed_when: "'Added new context' in kubeconfig_update.stdout"
+
+    - name: Set KUBECONFIG environment variable
+      lineinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        line: "export KUBECONFIG={{ kubeconfig_path | default(ansible_env.HOME + '/.kube/config') }}"
+        create: yes
+
+    - name: Test cluster connectivity
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: kube-system
+      register: cluster_test
+      failed_when: false
+
+    - name: Display cluster info
+      command: kubectl cluster-info
+      register: cluster_info
+      changed_when: false
+
+    - debug:
+        var: cluster_info.stdout_lines
+
+- name: Install additional kubectl plugins
+  when: kubectl_plugins_enabled | default(true)
+  include_tasks: plugins.yml
+
+- name: Configure kubectl aliases
+  when: kubectl_aliases_enabled | default(true)
+  include_tasks: aliases.yml
+  

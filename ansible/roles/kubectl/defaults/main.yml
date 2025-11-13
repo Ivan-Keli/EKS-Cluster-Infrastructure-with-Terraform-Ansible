@@ -1,0 +1,42 @@
+# ansible/roles/kubectl/defaults/main.yml
+# Purpose: Default variables for kubectl role
+
+---
+# kubectl version
+kubectl_version: "latest"  # or specify like "v1.28.0"
+kubectl_install_path: "/usr/local/bin"
+
+# Configuration
+kubectl_bash_completion: true
+kubectl_aliases_enabled: true
+kubectl_plugins_enabled: true
+
+# EKS Configuration
+configure_eks: true
+cluster_name: "eks-cluster-dev"
+aws_region: "us-east-1"
+aws_profile: "default"
+kubeconfig_path: "{{ ansible_env.HOME }}/.kube/config"
+
+# Krew settings
+krew_os: "{{ 'darwin' if ansible_os_family == 'Darwin' else 'linux' }}"
+krew_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+# kubectl plugins to install via krew
+kubectl_plugins:
+  - ns           # Switch namespaces
+  - ctx          # Switch contexts
+  - neat         # Clean up Kubernetes manifests
+  - tree         # Show tree view of resources
+  - resource-capacity  # Show resource usage
+  - view-secret  # Decode secrets
+  - debug        # Debug pods
+  - node-shell   # Get shell on nodes
+  - get-all      # Get all resources
+  - tail         # Tail logs from multiple pods
+
+# Additional tools
+install_k9s: false
+install_helm: true
+install_stern: false
+install_kubectx: false

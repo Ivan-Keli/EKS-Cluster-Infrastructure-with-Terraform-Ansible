@@ -1,0 +1,83 @@
+# ansible/roles/kubectl/tasks/aliases.yml
+# Purpose: Configure useful kubectl aliases
+
+---
+- name: Create kubectl aliases file
+  copy:
+    dest: "{{ ansible_env.HOME }}/.kubectl_aliases"
+    mode: '0644'
+    content: |
+      # Kubectl aliases for easier management
+      alias k='kubectl'
+      alias kga='kubectl get all'
+      alias kgp='kubectl get pods'
+      alias kgs='kubectl get svc'
+      alias kgn='kubectl get nodes'
+      alias kgns='kubectl get namespaces'
+      alias kgd='kubectl get deployment'
+      alias kaf='kubectl apply -f'
+      alias kdf='kubectl delete -f'
+      alias kdp='kubectl describe pod'
+      alias kdn='kubectl describe node'
+      alias kdd='kubectl describe deployment'
+      alias kds='kubectl describe svc'
+      alias kl='kubectl logs'
+      alias klf='kubectl logs -f'
+      alias kex='kubectl exec -it'
+      alias kns='kubectl config set-context --current --namespace'
+      alias kctx='kubectl config current-context'
+      alias kgc='kubectl config get-contexts'
+      alias kuc='kubectl config use-context'
+      alias kpf='kubectl port-forward'
+      alias kg='kubectl get'
+      alias kd='kubectl describe'
+      alias krm='kubectl delete'
+      alias ke='kubectl edit'
+      alias ksc='kubectl scale'
+      alias ktp='kubectl top pods'
+      alias ktn='kubectl top nodes'
+      alias kgpw='kubectl get pods --watch'
+      alias kgpwide='kubectl get pods -o wide'
+      alias kgall='kubectl get all --all-namespaces'
+      
+      # Functions for more complex operations
+      ksh() {
+        kubectl exec -it $1 -- ${2:-/bin/bash}
+      }
+      
+      klog() {
+        kubectl logs $1 ${2:+-c $2} ${3:+--tail=$3}
+      }
+      
+      kuse() {
+        kubectl config use-context $1
+      }
+      
+      knamespace() {
+        kubectl config set-context --current --namespace=$1
+      }
+      
+      kgetall() {
+        for i in $(kubectl api-resources --verbs=list --namespaced -o name | grep -v "events.events.k8s.io" | grep -v "events" | sort | uniq); do
+          echo "Resource:" $i
+          kubectl get --ignore-not-found ${i}
+        done
+      }
+
+- name: Source kubectl aliases in bashrc
+  lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: "source {{ ansible_env.HOME }}/.kubectl_aliases"
+    create: yes
+
+- name: Create kubectl completion for aliases
+  blockinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    block: |
+      # kubectl completion for aliases
+      complete -F __start_kubectl k
+      complete -F __start_kubectl kga
+      complete -F __start_kubectl kgp
+      complete -F __start_kubectl kgs
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - kubectl alias completion"
+    
