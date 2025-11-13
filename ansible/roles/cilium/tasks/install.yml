@@ -1,0 +1,78 @@
+# ansible/roles/cilium/tasks/install.yml
+# Purpose: Install Cilium CLI and Helm chart
+
+---
+- name: Check if Cilium CLI is installed
+  command: which cilium
+  register: cilium_cli_check
+  changed_when: false
+  failed_when: false
+
+- name: Download Cilium CLI
+  when: cilium_cli_check.rc != 0
+  block:
+    - name: Get latest Cilium CLI version
+      uri:
+        url: https://api.github.com/repos/cilium/cilium-cli/releases/latest
+        method: GET
+        return_content: true
+      register: cilium_latest_release
+      when: cilium_version == "latest"
+
+    - name: Set Cilium CLI version
+      set_fact:
+        cilium_cli_version: "{{ cilium_latest_release.json.tag_name | default('v0.15.0') }}"
+      when: cilium_version == "latest"
+
+    - name: Download Cilium CLI binary
+      get_url:
+        url: "https://github.com/cilium/cilium-cli/releases/download/{{ cilium_cli_version }}/cilium-linux-amd64.tar.gz"
+        dest: /tmp/cilium.tar.gz
+        mode: '0644'
+      delegate_to: localhost
+
+    - name: Extract Cilium CLI
+      unarchive:
+        src: /tmp/cilium.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
+      become: yes
+
+- name: Install Helm if not present
+  block:
+    - name: Check if Helm is installed
+      command: which helm
+      register: helm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Helm
+      shell: |
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        ./get_helm.sh
+      args:
+        creates: /usr/local/bin/helm
+      when: helm_check.rc != 0
+      become: yes
+
+- name: Add Cilium Helm repository
+  kubernetes.core.helm_repository:
+    name: cilium
+    repo_url: https://helm.cilium.io/
+    state: present
+
+- name: Update Helm repositories
+  command: helm repo update
+  changed_when: false
+
+- name: Install prerequisites for Cilium
+  become: yes
+  package:
+    name:
+      - conntrack
+      - ipset
+      - iptables
+    state: present
+    

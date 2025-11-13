@@ -1,0 +1,37 @@
+# ansible/roles/cilium/tasks/main.yml
+# Purpose: Main tasks for installing and configuring Cilium CNI
+
+---
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+  failed_when: false
+
+- name: Verify cluster connectivity
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: kube-system
+  register: cluster_check
+  failed_when: false
+
+- name: Check if Cilium is already installed
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: DaemonSet
+    name: cilium
+    namespace: kube-system
+  register: cilium_check
+  failed_when: false
+
+- name: Install Cilium CLI
+  include_tasks: install.yml
+  when: cilium_cli_install | default(true)
+
+- name: Configure Cilium
+  include_tasks: configure.yml
+  when: cilium_check.resources | length == 0
+
+- name: Validate Cilium installation
+  include_tasks: validate.yml
+  when: cilium_validate | default(true)
+  

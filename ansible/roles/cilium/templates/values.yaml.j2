@@ -1,0 +1,131 @@
+# ansible/roles/cilium/templates/values.yaml.j2
+# Purpose: Helm values template for Cilium installation
+
+# Image configuration
+image:
+  repository: {{ cilium_image_repository | default('quay.io/cilium/cilium') }}
+  tag: {{ cilium_image_tag | default('v1.14.4') }}
+  pullPolicy: {{ cilium_image_pull_policy | default('IfNotPresent') }}
+
+# Cilium Operator
+operator:
+  replicas: {{ cilium_operator_replicas | default(1) }}
+  image:
+    repository: {{ cilium_operator_image_repository | default('quay.io/cilium/operator') }}
+    tag: {{ cilium_operator_image_tag | default('v1.14.4') }}
+
+# IPAM configuration for AWS EKS
+ipam:
+  mode: {{ cilium_ipam_mode | default('eni') }}
+  operator:
+    clusterPoolIPv4PodCIDR: {{ cluster_pod_cidr | default('10.0.0.0/16') }}
+
+# AWS ENI configuration
+eni:
+  enabled: {{ cilium_eni_enabled | default(true) | bool }}
+  iamRole: {{ node_iam_role_name | default('') }}
+  updateEC2AdapterLimitViaAPI: true
+  awsReleaseExcessIPs: true
+  subnetIDsFilter: {{ private_subnet_id | default('') }}
+
+# Tunnel configuration (disabled for ENI mode)
+tunnel: {{ cilium_tunnel | default('disabled') }}
+
+# Kubernetes configuration
+k8s:
+  requireIPv4PodCIDR: false
+  serviceProxyName: "{{ cilium_service_proxy_name | default('') }}"
+
+# kube-proxy replacement
+kubeProxyReplacement: {{ cilium_kube_proxy_replacement | default('partial') }}
+k8sServiceHost: {{ cluster_endpoint | default('') }}
+k8sServicePort: {{ cluster_port | default('443') }}
+
+# BPF configuration
+bpf:
+  preallocateMaps: {{ cilium_bpf_preallocate_maps | default(false) | bool }}
+  masquerade: {{ cilium_bpf_masquerade | default(true) | bool }}
+  tproxy: {{ cilium_bpf_tproxy | default(true) | bool }}
+
+# Hubble (observability)
+hubble:
+  enabled: {{ cilium_hubble_enabled | default(true) | bool }}
+  relay:
+    enabled: {{ cilium_hubble_relay_enabled | default(true) | bool }}
+  ui:
+    enabled: {{ cilium_hubble_ui_enabled | default(true) | bool }}
+    service:
+      type: {{ cilium_hubble_ui_service_type | default('ClusterIP') }}
+  metrics:
+    enabled:
+    - dns
+    - drop
+    - tcp
+    - flow
+    - icmp
+    - http
+
+# Network Policy
+policyEnforcementMode: {{ cilium_policy_enforcement | default('default') }}
+
+# Monitoring
+prometheus:
+  enabled: {{ cilium_prometheus_enabled | default(false) | bool }}
+  serviceMonitor:
+    enabled: {{ cilium_service_monitor_enabled | default(false) | bool }}
+
+# Security
+encryption:
+  enabled: {{ cilium_encryption_enabled | default(false) | bool }}
+  type: {{ cilium_encryption_type | default('ipsec') }}
+
+# LoadBalancer
+loadBalancer:
+  mode: {{ cilium_loadbalancer_mode | default('dsr') }}
+  acceleration: {{ cilium_loadbalancer_acceleration | default('native') }}
+
+# NodePort
+nodePort:
+  enabled: {{ cilium_nodeport_enabled | default(true) | bool }}
+  bindProtection: {{ cilium_nodeport_bind_protection | default(true) | bool }}
+  autoProtectPortRange: {{ cilium_nodeport_auto_protect | default(true) | bool }}
+  enableHealthCheck: {{ cilium_nodeport_health_check | default(true) | bool }}
+
+# Debug
+debug:
+  enabled: {{ cilium_debug_enabled | default(false) | bool }}
+  verbose: {{ cilium_debug_verbose | default('') }}
+
+# Resources
+resources:
+  limits:
+    cpu: {{ cilium_cpu_limit | default('1000m') }}
+    memory: {{ cilium_memory_limit | default('1Gi') }}
+  requests:
+    cpu: {{ cilium_cpu_request | default('100m') }}
+    memory: {{ cilium_memory_request | default('128Mi') }}
+
+# Tolerations for node taints
+tolerations:
+- operator: Exists
+
+# Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: k8s-app
+            operator: In
+            values:
+            - cilium
+        topologyKey: kubernetes.io/hostname
+
+# Update strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    

@@ -1,0 +1,87 @@
+# ansible/inventories/dev/aws_ec2.yml
+# Purpose: Dynamic inventory configuration for AWS EC2 instances
+
+plugin: aws_ec2
+
+# AWS regions to query
+regions:
+  - us-east-1
+
+# Authentication (uses AWS CLI config by default)
+# boto_profile: default
+
+# Filters to identify EKS nodes
+filters:
+  # Filter by cluster name tag
+  tag:kubernetes.io/cluster/eks-cluster-dev: owned
+  instance-state-name: running
+
+# Groups to create based on tags and attributes
+keyed_groups:
+  # Create groups by instance type
+  - key: instance_type
+    prefix: instance_type
+    separator: "_"
+  
+  # Create groups by availability zone
+  - key: placement.availability_zone
+    prefix: az
+    separator: "_"
+  
+  # Create groups by tags
+  - key: tags.Name
+    prefix: name
+    separator: "_"
+  
+  # Create EKS specific groups
+  - key: tags['kubernetes.io/cluster/eks-cluster-dev']
+    prefix: eks_cluster
+    separator: "_"
+  
+  # Group by node group
+  - key: tags['eks:nodegroup-name']
+    prefix: nodegroup
+    separator: "_"
+
+# Set ansible_host to private IP for internal communication
+compose:
+  ansible_host: private_ip_address
+  ansible_user: "'ec2-user'"
+  
+  # Custom variables from tags
+  cluster_name: tags['kubernetes.io/cluster/eks-cluster-dev']
+  node_group: tags['eks:nodegroup-name']
+  environment: tags.Environment | default('dev')
+  
+  # Instance metadata
+  instance_id: instance_id
+  instance_type: instance_type
+  availability_zone: placement.availability_zone
+  
+  # Network information
+  private_ip: private_ip_address
+  public_ip: public_ip_address | default('none')
+  vpc_id: vpc_id
+  subnet_id: subnet_id
+
+# Cache configuration
+cache: true
+cache_plugin: jsonfile
+cache_timeout: 300
+cache_connection: /tmp/aws_ec2_inventory_cache
+cache_prefix: aws_ec2
+
+# Include instances without public IPs (nodes in private subnet)
+include_filters:
+  - instance-state-name: running
+
+# Hostnames settings
+hostnames:
+  - tag:Name
+  - instance-id
+  - dns-name
+  - private-ip-address
+
+# Use private IPs for connection (since nodes are in private subnet)
+use_contrib_script_compatible_sanitization: True
+strict: False

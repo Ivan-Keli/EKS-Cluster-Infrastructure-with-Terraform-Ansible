@@ -1,0 +1,76 @@
+# ansible/roles/cilium/tasks/validate.yml
+# Purpose: Validate Cilium installation and functionality
+
+---
+- name: Check Cilium status
+  command: cilium status --wait
+  register: cilium_status
+  changed_when: false
+  retries: 5
+  delay: 30
+  until: cilium_status.rc == 0
+
+- name: Display Cilium status
+  debug:
+    var: cilium_status.stdout_lines
+
+- name: Run Cilium connectivity test
+  command: cilium connectivity test
+  register: cilium_connectivity
+  changed_when: false
+  when: cilium_run_connectivity_test | default(false)
+
+- name: Verify Cilium pods are running
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: kube-system
+    label_selectors:
+      - k8s-app=cilium
+  register: cilium_pod_status
+
+- name: Ensure all Cilium pods are ready
+  assert:
+    that:
+      - cilium_pod_status.resources | length > 0
+      - cilium_pod_status.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == cilium_pod_status.resources | length
+    fail_msg: "Not all Cilium pods are running"
+    success_msg: "All Cilium pods are running successfully"
+
+- name: Check Cilium endpoints
+  command: kubectl get cep -A
+  register: cilium_endpoints
+  changed_when: false
+
+- name: Display Cilium endpoints
+  debug:
+    var: cilium_endpoints.stdout_lines
+
+- name: Test pod-to-pod connectivity
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: cilium-test-client
+        namespace: default
+      spec:
+        containers:
+        - name: client
+          image: nicolaka/netshoot:latest
+          command: ["/bin/sleep", "3600"]
+  register: test_pod
+  when: cilium_test_connectivity | default(false)
+
+- name: Clean up test pod
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Pod
+    name: cilium-test-client
+    namespace: default
+  when: 
+    - cilium_test_connectivity | default(false)
+    - test_pod is defined
+    

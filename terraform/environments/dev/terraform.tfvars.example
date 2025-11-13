@@ -1,7 +1,69 @@
-region = "us-east-1"
-cluster_name = "dev-eks-cluster"
-vpc_cidr = "10.0.0.0/16"
+# terraform/environments/dev/terraform.tfvars.example
+# Purpose: Example values for Terraform variables
+# Copy this to terraform.tfvars and customize for your environment
+
+# General Configuration
+region       = "us-east-1"
+environment  = "dev"
+project_name = "eks-cluster"
+
+# VPC Configuration
+vpc_cidr            = "10.0.0.0/16"
+public_subnet_cidr  = "10.0.1.0/24"
+private_subnet_cidr = "10.0.2.0/24"
+enable_vpc_endpoints = true
+
+# EKS Cluster Configuration
+kubernetes_version      = "1.28"
+endpoint_private_access = true
+endpoint_public_access  = true
+public_access_cidrs    = ["0.0.0.0/0"]  # Restrict this to your IP in production
+
+# Control plane logging - reduce in production to save costs
+cluster_log_types = [
+  "api",
+  "audit",
+  "authenticator",
+  "controllerManager",
+  "scheduler"
+]
+
+# Node Group Configuration - t3.micro as specified
 node_instance_type = "t3.micro"
-min_nodes = 1
-desired_nodes = 1
-max_nodes = 3
+node_disk_size     = 20
+node_min_size      = 1
+node_desired_size  = 1
+node_max_size      = 3
+
+# SSH Access (optional - set to true and add key for debugging)
+enable_ssh_access = false
+ssh_access_cidrs  = []  # Add your IP here if enabling SSH: ["YOUR_IP/32"]
+key_name          = ""  # Add your EC2 key pair name if enabling SSH
+
+# Monitoring and Autoscaling
+enable_monitoring  = false  # Set to true in production
+enable_autoscaling = true
+cpu_threshold_high = 70
+cpu_threshold_low  = 30
+
+# Bootstrap Configuration
+bootstrap_arguments = "--container-runtime containerd --kubelet-extra-args '--max-pods=20'"
+
+# Kubernetes Node Labels
+kubernetes_labels = {
+  environment  = "dev"
+  managed_by   = "terraform"
+  node_type    = "general"
+  cost_center  = "engineering"
+}
+
+# Additional Tags
+tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "Engineering"
+  Terraform   = "true"
+  Purpose     = "EKS Development Cluster"
+}
+
+# Local Configuration
+create_kubeconfig = true

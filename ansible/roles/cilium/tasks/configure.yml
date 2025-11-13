@@ -1,0 +1,95 @@
+# ansible/roles/cilium/tasks/configure.yml
+# Purpose: Configure and deploy Cilium to the cluster
+
+---
+- name: Create Cilium namespace
+  kubernetes.core.k8s:
+    name: kube-system
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Generate Cilium values file from template
+  template:
+    src: values.yaml.j2
+    dest: /tmp/cilium-values.yaml
+    mode: '0644'
+  delegate_to: localhost
+
+- name: Install Cilium using Helm
+  kubernetes.core.helm:
+    name: cilium
+    chart_ref: cilium/cilium
+    release_namespace: kube-system
+    create_namespace: true
+    values_files:
+      - /tmp/cilium-values.yaml
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 600
+  register: cilium_install
+
+- name: Wait for Cilium pods to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: kube-system
+    label_selectors:
+      - k8s-app=cilium
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 300
+  register: cilium_pods
+
+- name: Apply Cilium network policies
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', item) | from_yaml }}"
+  with_fileglob:
+    - "{{ role_path }}/files/network-policies/*.yaml"
+  when: cilium_network_policies_enabled | default(false)
+
+- name: Configure Cilium for EKS
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cilium-config
+        namespace: kube-system
+      data:
+        enable-endpoint-routes: "true"
+        enable-local-node-route: "false"
+        enable-ipv4-masquerade: "true"
+        enable-ipv6-masquerade: "false"
+        kube-proxy-replacement: "{{ cilium_kube_proxy_replacement }}"
+        enable-host-reachable-services: "true"
+        enable-hubble: "{{ cilium_hubble_enabled | string | lower }}"
+        ipam: "eni"
+        enable-eni: "true"
+        tunnel: "disabled"
+        enable-ipv4: "true"
+        enable-ipv6: "false"
+  when: cloud_provider == "aws"
+
+- name: Restart Cilium DaemonSet to apply configuration
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: cilium
+        namespace: kube-system
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+  when: cilium_install.changed
+  

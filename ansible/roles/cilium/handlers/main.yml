@@ -1,0 +1,55 @@
+# ansible/roles/cilium/handlers/main.yml
+# Purpose: Handlers for Cilium role
+
+---
+- name: Restart Cilium
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: cilium
+        namespace: kube-system
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+  listen: "restart cilium"
+
+- name: Restart Cilium operator
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cilium-operator
+        namespace: kube-system
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+  listen: "restart cilium operator"
+
+- name: Wait for Cilium to be ready
+  command: cilium status --wait
+  register: cilium_wait_status
+  until: cilium_wait_status.rc == 0
+  retries: 10
+  delay: 30
+  listen: "wait for cilium"
+
+- name: Clean up Cilium test pods
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Pod
+    namespace: "{{ item.namespace | default('default') }}"
+    name: "{{ item.name }}"
+  loop:
+    - { name: "cilium-test-client" }
+    - { name: "cilium-test-server" }
+  listen: "cleanup cilium tests"

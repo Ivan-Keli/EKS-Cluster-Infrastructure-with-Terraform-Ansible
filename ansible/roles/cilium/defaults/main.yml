@@ -1,0 +1,83 @@
+# ansible/roles/cilium/defaults/main.yml
+# Purpose: Default variables for Cilium role
+
+---
+# Cilium version
+cilium_version: "1.14.4"
+cilium_cli_version: "v0.15.0"
+
+# Installation options
+cilium_cli_install: true
+cilium_validate: true
+cilium_run_connectivity_test: false
+cilium_test_connectivity: false
+
+# Image configuration
+cilium_image_repository: "quay.io/cilium/cilium"
+cilium_image_tag: "v1.14.4"
+cilium_image_pull_policy: "IfNotPresent"
+
+# Operator configuration
+cilium_operator_replicas: 1
+cilium_operator_image_repository: "quay.io/cilium/operator"
+cilium_operator_image_tag: "v1.14.4"
+
+# AWS/EKS specific
+cloud_provider: "aws"
+cilium_ipam_mode: "eni"
+cilium_eni_enabled: true
+cilium_tunnel: "disabled"
+
+# kube-proxy replacement
+cilium_kube_proxy_replacement: "partial"
+cilium_service_proxy_name: ""
+
+# BPF configuration
+cilium_bpf_preallocate_maps: false
+cilium_bpf_masquerade: true
+cilium_bpf_tproxy: true
+
+# Hubble observability
+cilium_hubble_enabled: true
+cilium_hubble_relay_enabled: true
+cilium_hubble_ui_enabled: true
+cilium_hubble_ui_service_type: "ClusterIP"
+
+# Network policies
+cilium_network_policies_enabled: false
+cilium_policy_enforcement: "default"
+
+# Monitoring
+cilium_prometheus_enabled: false
+cilium_service_monitor_enabled: false
+
+# Security
+cilium_encryption_enabled: false
+cilium_encryption_type: "ipsec"
+
+# LoadBalancer
+cilium_loadbalancer_mode: "dsr"
+cilium_loadbalancer_acceleration: "native"
+
+# NodePort
+cilium_nodeport_enabled: true
+cilium_nodeport_bind_protection: true
+cilium_nodeport_auto_protect: true
+cilium_nodeport_health_check: true
+
+# Resources
+cilium_cpu_limit: "1000m"
+cilium_memory_limit: "1Gi"
+cilium_cpu_request: "100m"
+cilium_memory_request: "128Mi"
+
+# Debug
+cilium_debug_enabled: false
+cilium_debug_verbose: ""
+
+# Cluster configuration (should be provided by playbook)
+cluster_endpoint: ""
+cluster_port: "443"
+cluster_pod_cidr: "10.0.0.0/16"
+private_subnet_id: ""
+node_iam_role_name: ""

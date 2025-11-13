@@ -1,0 +1,22 @@
+# ansible/roles/cilium/files/network-policies/default-deny.yaml
+# Purpose: Example Cilium network policy for default deny
+
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: default
+spec:
+  description: "Default deny all ingress traffic"
+  endpointSelector:
+    matchLabels:
+      {}
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        reserved:host
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
+        
