@@ -1,22 +1,23 @@
 # terraform/environments/dev/backend.tf
 # Purpose: Backend configuration for storing Terraform state
 
-# Configure S3 backend for state storage
-# Uncomment and configure after creating S3 bucket and DynamoDB table
-/*
-terraform {
-  backend "s3" {
-    bucket         = "your-terraform-state-bucket-name"
-    key            = "dev/eks-cluster/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "terraform-state-lock"
-  }
-}
-*/
+# IMPORTANT: Run terraform/backend-setup first to create these resources
+# Then uncomment the s3 backend block below and comment out the local backend
 
-# For now, using local backend
-# Remove this when switching to S3 backend
+# Configure S3 backend for state storage
+# terraform {
+#   backend "s3" {
+#     bucket         = "eks-cluster-terraform-state-[ACCOUNT-ID]-dev"  # Replace [ACCOUNT-ID]
+#     key            = "dev/eks-cluster/terraform.tfstate"
+#     region         = "us-east-1"
+#     encrypt        = true
+#     kms_key_id     = "alias/eks-cluster-terraform-state-dev"
+#     dynamodb_table = "eks-cluster-terraform-state-lock-dev"
+#   }
+# }
+
+# For initial setup, using local backend
+# Comment this out after setting up S3 backend
 terraform {
   backend "local" {
     path = "terraform.tfstate"

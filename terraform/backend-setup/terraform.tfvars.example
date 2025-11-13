@@ -1,0 +1,6 @@
+# terraform/backend-setup/terraform.tfvars.example
+# Purpose: Example values for backend setup
+
+region       = "us-east-1"
+environment  = "dev"
+project_name = "eks-cluster"
