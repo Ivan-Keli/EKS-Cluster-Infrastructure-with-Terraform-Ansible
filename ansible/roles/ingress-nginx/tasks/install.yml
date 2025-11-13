@@ -1,0 +1,71 @@
+# ansible/roles/ingress-nginx/tasks/install.yml
+# Purpose: Install NGINX Ingress Controller using Helm
+
+---
+- name: Generate Ingress Controller values file
+  template:
+    src: values.yaml.j2
+    dest: /tmp/ingress-nginx-values.yaml
+    mode: '0644'
+
+- name: Install NGINX Ingress Controller using Helm
+  kubernetes.core.helm:
+    name: ingress-nginx
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: "{{ ingress_namespace }}"
+    create_namespace: true
+    values_files:
+      - /tmp/ingress-nginx-values.yaml
+    wait: true
+    wait_timeout: 600
+    atomic: "{{ ingress_atomic_install }}"
+  register: ingress_install
+
+- name: Wait for Ingress Controller deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: ingress-nginx-controller
+    namespace: "{{ ingress_namespace }}"
+    wait: true
+    wait_condition:
+      type: Progressing
+      status: "True"
+    wait_timeout: 300
+
+- name: Get Ingress Controller service
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: ingress-nginx-controller
+    namespace: "{{ ingress_namespace }}"
+  register: ingress_service
+
+- name: Wait for Load Balancer to be provisioned
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Service
+    name: ingress-nginx-controller
+    namespace: "{{ ingress_namespace }}"
+    wait: true
+    wait_condition:
+      type: "LoadBalancer"
+    wait_timeout: 300
+  when: ingress_service_type == "LoadBalancer"
+
+- name: Get Load Balancer URL
+  shell: |
+    kubectl get service ingress-nginx-controller \
+      -n {{ ingress_namespace }} \
+      -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+  register: lb_hostname
+  when: ingress_service_type == "LoadBalancer"
+  changed_when: false
+
+- name: Display Load Balancer information
+  debug:
+    msg:
+      - "NGINX Ingress Controller installed successfully"
+      - "Load Balancer URL: {{ lb_hostname.stdout | default('Pending...') }}"
+  when: ingress_service_type == "LoadBalancer"
+  

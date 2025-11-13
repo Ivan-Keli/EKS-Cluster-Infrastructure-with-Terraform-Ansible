@@ -1,0 +1,77 @@
+# ansible/roles/ingress-nginx/tasks/monitoring.yml
+# Purpose: Configure monitoring for NGINX Ingress Controller
+
+---
+- name: Create ServiceMonitor for Prometheus
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: nginx-ingress-controller
+        namespace: "{{ ingress_namespace }}"
+        labels:
+          app: nginx-ingress
+          release: prometheus
+      spec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+            app.kubernetes.io/component: controller
+        endpoints:
+        - port: metrics
+          interval: 30s
+          path: /metrics
+  when: prometheus_operator_installed | default(false)
+
+- name: Configure Grafana dashboard ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: nginx-ingress-grafana-dashboard
+        namespace: "{{ ingress_namespace }}"
+        labels:
+          grafana_dashboard: "1"
+      data:
+        nginx-ingress-dashboard.json: |
+          {{ lookup('file', 'files/grafana-dashboard.json') }}
+  when: 
+    - grafana_installed | default(false)
+    - ingress_grafana_dashboard | default(true)
+
+- name: Create PrometheusRule for alerts
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: PrometheusRule
+      metadata:
+        name: nginx-ingress-alerts
+        namespace: "{{ ingress_namespace }}"
+      spec:
+        groups:
+        - name: nginx-ingress
+          interval: 30s
+          rules:
+          - alert: NginxIngressHighLatency
+            expr: nginx_ingress_controller_request_duration_seconds_bucket{le="1"} > 0.99
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High latency in NGINX Ingress"
+              description: "99th percentile latency is above 1 second"
+          - alert: NginxIngressHighErrorRate
+            expr: rate(nginx_ingress_controller_requests{status=~"5.."}[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate in NGINX Ingress"
+              description: "Error rate is above 5%"
+  when: prometheus_operator_installed | default(false)
+  

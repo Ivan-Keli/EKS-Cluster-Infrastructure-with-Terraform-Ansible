@@ -1,0 +1,181 @@
+# ansible/roles/ingress-nginx/templates/values.yaml.j2
+# Purpose: Helm values for NGINX Ingress Controller
+
+controller:
+  # Image configuration
+  image:
+    repository: {{ ingress_image_repository }}
+    tag: {{ ingress_image_tag }}
+    pullPolicy: {{ ingress_image_pull_policy }}
+  
+  # Replica configuration
+  replicaCount: {{ ingress_replica_count }}
+  
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  
+  # Resources
+  resources:
+    limits:
+      cpu: {{ ingress_cpu_limit }}
+      memory: {{ ingress_memory_limit }}
+    requests:
+      cpu: {{ ingress_cpu_request }}
+      memory: {{ ingress_memory_request }}
+  
+  # Service configuration
+  service:
+    enabled: true
+    type: {{ ingress_service_type }}
+    {% if ingress_service_type == "LoadBalancer" %}
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "{{ aws_lb_type }}"
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+      service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+      {% if aws_acm_certificate_arn is defined and aws_acm_certificate_arn != "" %}
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "{{ aws_acm_certificate_arn }}"
+      service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+      {% endif %}
+    {% endif %}
+    targetPorts:
+      http: 80
+      https: 443
+    ports:
+      http: 80
+      https: 443
+  
+  # Autoscaling
+  autoscaling:
+    enabled: {{ ingress_autoscaling_enabled | bool }}
+    minReplicas: {{ ingress_autoscaling_min_replicas }}
+    maxReplicas: {{ ingress_autoscaling_max_replicas }}
+    targetCPUUtilizationPercentage: {{ ingress_autoscaling_target_cpu }}
+    targetMemoryUtilizationPercentage: {{ ingress_autoscaling_target_memory }}
+  
+  # Pod configuration
+  nodeSelector:
+    kubernetes.io/os: linux
+  
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Equal"
+    effect: "NoSchedule"
+  
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - ingress-nginx
+          topologyKey: kubernetes.io/hostname
+  
+  # Metrics
+  metrics:
+    enabled: {{ ingress_metrics_enabled | bool }}
+    serviceMonitor:
+      enabled: {{ ingress_service_monitor_enabled | bool }}
+      namespace: "{{ ingress_namespace }}"
+    
+  # Config
+  config:
+    use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+    use-proxy-protocol: "false"
+    proxy-body-size: "{{ nginx_proxy_body_size }}"
+    proxy-connect-timeout: "{{ nginx_proxy_connect_timeout }}"
+    proxy-send-timeout: "{{ nginx_proxy_send_timeout }}"
+    proxy-read-timeout: "{{ nginx_proxy_read_timeout }}"
+    client-header-buffer-size: "1k"
+    large-client-header-buffers: "4 16k"
+    enable-brotli: "true"
+    enable-modsecurity: "{{ nginx_enable_modsecurity | string | lower }}"
+    ssl-protocols: "TLSv1.2 TLSv1.3"
+    ssl-ciphers: "{{ nginx_ssl_ciphers }}"
+    server-tokens: "false"
+  
+  # Admission webhooks
+  admissionWebhooks:
+    enabled: {{ ingress_admission_webhooks_enabled | bool }}
+    failurePolicy: Fail
+    patch:
+      enabled: true
+      image:
+        repository: {{ ingress_webhook_patch_image }}
+        tag: {{ ingress_webhook_patch_tag }}
+  
+  # Priority class
+  priorityClassName: "{{ ingress_priority_class }}"
+  
+  # Lifecycle hooks
+  lifecycle:
+    preStop:
+      exec:
+        command:
+        - /wait-shutdown
+  
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 10254
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 10254
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# RBAC
+rbac:
+  create: true
+
+# Service Account
+serviceAccount:
+  create: true
+  name: ingress-nginx
+  {% if alb_controller_role_arn is defined and alb_controller_role_arn != "" %}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ alb_controller_role_arn }}
+  {% endif %}
+
+# Default backend
+defaultBackend:
+  enabled: {{ ingress_default_backend_enabled | bool }}
+  image:
+    repository: {{ ingress_default_backend_image }}
+    tag: {{ ingress_default_backend_tag }}
+  resources:
+    limits:
+      cpu: 10m
+      memory: 20Mi
+    requests:
+      cpu: 10m
+      memory: 20Mi
+
+# Pod Security Policy
+podSecurityPolicy:
+  enabled: false
+
+# Network Policy
+networkPolicy:
+  enabled: false
+
+# Ingress Class
+ingressClassResource:
+  enabled: true
+  default: {{ ingress_nginx_default | bool }}
+  name: nginx
+  controllerValue: k8s.io/ingress-nginx
+  

@@ -1,0 +1,47 @@
+# ansible/roles/ingress-nginx/tasks/main.yml
+# Purpose: Install and configure NGINX Ingress Controller for EKS
+
+---
+- name: Check if Ingress Controller is already installed
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: ingress-nginx-controller
+    namespace: "{{ ingress_namespace }}"
+  register: ingress_check
+  failed_when: false
+
+- name: Create ingress namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ ingress_namespace }}"
+        labels:
+          name: "{{ ingress_namespace }}"
+
+- name: Install Ingress Controller prerequisites
+  include_tasks: prerequisites.yml
+
+- name: Install NGINX Ingress Controller
+  include_tasks: install.yml
+  when: ingress_check.resources | length == 0 or ingress_force_install | default(false)
+
+- name: Configure Ingress Controller for AWS
+  include_tasks: configure_aws.yml
+  when: cloud_provider == "aws"
+
+- name: Create Ingress classes
+  include_tasks: ingress_classes.yml
+  when: ingress_create_classes | default(true)
+
+- name: Test Ingress Controller
+  include_tasks: test.yml
+  when: ingress_test_installation | default(false)
+
+- name: Configure monitoring
+  include_tasks: monitoring.yml
+  when: ingress_enable_monitoring | default(false)
+  

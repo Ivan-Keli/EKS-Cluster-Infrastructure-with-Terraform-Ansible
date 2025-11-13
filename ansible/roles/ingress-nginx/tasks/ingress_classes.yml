@@ -1,0 +1,69 @@
+# ansible/roles/ingress-nginx/tasks/ingress_classes.yml
+# Purpose: Create Ingress classes for different routing scenarios
+
+---
+- name: Create default NGINX IngressClass
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: IngressClass
+      metadata:
+        name: nginx
+        annotations:
+          ingressclass.kubernetes.io/is-default-class: "{{ ingress_nginx_default | string | lower }}"
+      spec:
+        controller: k8s.io/ingress-nginx
+
+- name: Create internal NGINX IngressClass
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: IngressClass
+      metadata:
+        name: nginx-internal
+        annotations:
+          ingressclass.kubernetes.io/is-default-class: "false"
+      spec:
+        controller: k8s.io/ingress-nginx
+        parameters:
+          apiGroup: k8s.io/v1
+          kind: ConfigMap
+          name: nginx-internal-config
+          namespace: "{{ ingress_namespace }}"
+  when: ingress_create_internal_class | default(false)
+
+- name: Create rate-limited IngressClass
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: IngressClass
+      metadata:
+        name: nginx-rate-limited
+      spec:
+        controller: k8s.io/ingress-nginx
+        parameters:
+          apiGroup: k8s.io/v1
+          kind: ConfigMap
+          name: nginx-rate-limited-config
+          namespace: "{{ ingress_namespace }}"
+  when: ingress_create_rate_limited_class | default(false)
+
+- name: Create ConfigMap for rate-limited class
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: nginx-rate-limited-config
+        namespace: "{{ ingress_namespace }}"
+      data:
+        limit-rps: "100"
+        limit-rpm: "1000"
+        limit-burst-multiplier: "5"
+        limit-connections: "20"
+  when: ingress_create_rate_limited_class | default(false)
+  

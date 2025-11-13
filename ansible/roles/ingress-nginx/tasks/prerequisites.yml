@@ -1,0 +1,100 @@
+# ansible/roles/ingress-nginx/tasks/prerequisites.yml
+# Purpose: Set up prerequisites for NGINX Ingress Controller
+
+---
+- name: Add NGINX Ingress Helm repository
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: https://kubernetes.github.io/ingress-nginx
+    state: present
+
+- name: Update Helm repositories
+  command: helm repo update
+  changed_when: false
+
+- name: Create ConfigMap for custom configuration
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: nginx-configuration
+        namespace: "{{ ingress_namespace }}"
+      data:
+        proxy-body-size: "{{ nginx_proxy_body_size }}"
+        proxy-connect-timeout: "{{ nginx_proxy_connect_timeout }}"
+        proxy-send-timeout: "{{ nginx_proxy_send_timeout }}"
+        proxy-read-timeout: "{{ nginx_proxy_read_timeout }}"
+        use-forwarded-headers: "true"
+        compute-full-forwarded-for: "true"
+        use-proxy-protocol: "false"
+        enable-modsecurity: "{{ nginx_enable_modsecurity | string | lower }}"
+        enable-owasp-modsecurity-crs: "{{ nginx_enable_owasp | string | lower }}"
+        ssl-protocols: "TLSv1.2 TLSv1.3"
+        ssl-ciphers: "{{ nginx_ssl_ciphers }}"
+        enable-brotli: "true"
+        brotli-level: "6"
+        server-tokens: "false"
+        client-body-buffer-size: "16K"
+        client-header-buffer-size: "1k"
+        large-client-header-buffers: "4 16k"
+        http-snippet: |
+          more_set_headers "X-Frame-Options: SAMEORIGIN";
+          more_set_headers "X-Content-Type-Options: nosniff";
+          more_set_headers "X-XSS-Protection: 1; mode=block";
+          more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+
+- name: Create ServiceAccount for Ingress Controller
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: ingress-nginx
+        namespace: "{{ ingress_namespace }}"
+        annotations:
+          eks.amazonaws.com/role-arn: "{{ alb_controller_role_arn | default('') }}"
+
+- name: Create RBAC resources
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: ingress-nginx
+      rules:
+        - apiGroups: [""]
+          resources: ["configmaps", "endpoints", "nodes", "pods", "secrets", "namespaces"]
+          verbs: ["list", "watch"]
+        - apiGroups: [""]
+          resources: ["nodes"]
+          verbs: ["get"]
+        - apiGroups: [""]
+          resources: ["services", "endpoints"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["ingresses", "ingressclasses"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["events"]
+          verbs: ["create", "patch"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["ingresses/status"]
+          verbs: ["update"]
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: ingress-nginx
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: ingress-nginx
+      subjects:
+        - kind: ServiceAccount
+          name: ingress-nginx
+          namespace: "{{ ingress_namespace }}"
+          

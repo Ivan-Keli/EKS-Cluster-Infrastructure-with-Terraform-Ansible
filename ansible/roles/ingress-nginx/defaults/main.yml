@@ -1,0 +1,84 @@
+# ansible/roles/ingress-nginx/defaults/main.yml
+# Purpose: Default variables for NGINX Ingress Controller role
+
+---
+# Installation options
+ingress_force_install: false
+ingress_test_installation: false
+ingress_cleanup_test: true
+ingress_atomic_install: true
+
+# Namespace
+ingress_namespace: "ingress-nginx"
+
+# Cloud provider
+cloud_provider: "aws"
+
+# AWS specific
+aws_region: "us-east-1"
+aws_lb_type: "nlb"  # or "alb"
+aws_lb_idle_timeout: "60"
+aws_acm_certificate_arn: ""
+aws_target_group_arn: ""
+aws_alb_controller_enabled: false
+alb_controller_role_arn: ""
+node_security_group_id: ""
+configure_security_groups: false
+
+# Image configuration
+ingress_image_repository: "registry.k8s.io/ingress-nginx/controller"
+ingress_image_tag: "v1.9.4"
+ingress_image_pull_policy: "IfNotPresent"
+
+# Controller configuration
+ingress_replica_count: 2
+ingress_service_type: "LoadBalancer"
+
+# Resources
+ingress_cpu_limit: "500m"
+ingress_memory_limit: "512Mi"
+ingress_cpu_request: "100m"
+ingress_memory_request: "128Mi"
+
+# Autoscaling
+ingress_autoscaling_enabled: true
+ingress_autoscaling_min_replicas: 2
+ingress_autoscaling_max_replicas: 10
+ingress_autoscaling_target_cpu: 70
+ingress_autoscaling_target_memory: 80
+
+# NGINX Configuration
+nginx_proxy_body_size: "100m"
+nginx_proxy_connect_timeout: "600"
+nginx_proxy_send_timeout: "600"
+nginx_proxy_read_timeout: "600"
+nginx_enable_modsecurity: false
+nginx_enable_owasp: false
+nginx_ssl_ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256"
+
+# Ingress Classes
+ingress_create_classes: true
+ingress_nginx_default: true
+ingress_create_internal_class: false
+ingress_create_rate_limited_class: true
+
+# Metrics and monitoring
+ingress_metrics_enabled: true
+ingress_service_monitor_enabled: false
+ingress_enable_monitoring: false
+prometheus_operator_installed: false
+grafana_installed: false
+ingress_grafana_dashboard: true
+
+# Admission webhooks
+ingress_admission_webhooks_enabled: true
+ingress_webhook_patch_image: "registry.k8s.io/ingress-nginx/kube-webhook-certgen"
+ingress_webhook_patch_tag: "v20231011"
+
+# Default backend
+ingress_default_backend_enabled: true
+ingress_default_backend_image: "registry.k8s.io/defaultbackend-amd64"
+ingress_default_backend_tag: "1.5"
+
+# Priority class
+ingress_priority_class: "system-cluster-critical"

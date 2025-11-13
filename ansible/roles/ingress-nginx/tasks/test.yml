@@ -1,0 +1,133 @@
+# ansible/roles/ingress-nginx/tasks/test.yml
+# Purpose: Test NGINX Ingress Controller functionality
+
+---
+- name: Create test namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: ingress-test
+
+- name: Deploy test application
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: test-app
+        namespace: ingress-test
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: test-app
+        template:
+          metadata:
+            labels:
+              app: test-app
+          spec:
+            containers:
+            - name: nginx
+              image: nginx:alpine
+              ports:
+              - containerPort: 80
+              resources:
+                limits:
+                  memory: "128Mi"
+                  cpu: "100m"
+
+- name: Create service for test application
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: test-app-service
+        namespace: ingress-test
+      spec:
+        selector:
+          app: test-app
+        ports:
+        - port: 80
+          targetPort: 80
+        type: ClusterIP
+
+- name: Create test Ingress resource
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: test-ingress
+        namespace: ingress-test
+        annotations:
+          nginx.ingress.kubernetes.io/rewrite-target: /
+          nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      spec:
+        ingressClassName: nginx
+        rules:
+        - http:
+            paths:
+            - path: /test
+              pathType: Prefix
+              backend:
+                service:
+                  name: test-app-service
+                  port:
+                    number: 80
+
+- name: Wait for test deployment to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: test-app
+    namespace: ingress-test
+    wait: true
+    wait_condition:
+      type: Progressing
+      status: "True"
+    wait_timeout: 120
+
+- name: Get Ingress status
+  kubernetes.core.k8s_info:
+    api_version: networking.k8s.io/v1
+    kind: Ingress
+    name: test-ingress
+    namespace: ingress-test
+  register: test_ingress
+
+- name: Test Ingress endpoint
+  uri:
+    url: "http://{{ lb_hostname.stdout }}/test"
+    method: GET
+    status_code: 200
+  register: test_response
+  retries: 5
+  delay: 10
+  until: test_response.status == 200
+  when: 
+    - lb_hostname is defined
+    - lb_hostname.stdout != ""
+  ignore_errors: yes
+
+- name: Display test results
+  debug:
+    msg:
+      - "Ingress test completed"
+      - "Test endpoint status: {{ test_response.status | default('Not tested') }}"
+      - "Ingress address: {{ test_ingress.resources[0].status.loadBalancer.ingress[0].hostname | default('Pending') }}"
+
+- name: Clean up test resources
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: ingress-test
+  when: ingress_cleanup_test | default(true)
+  

@@ -1,0 +1,69 @@
+# ansible/roles/ingress-nginx/tasks/configure_aws.yml
+# Purpose: Configure NGINX Ingress for AWS-specific features
+
+---
+- name: Patch Ingress service for AWS NLB
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ingress-nginx-controller
+        namespace: "{{ ingress_namespace }}"
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: "{{ aws_lb_type }}"
+          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+          service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+          service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "{{ aws_lb_idle_timeout }}"
+          service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "{{ aws_acm_certificate_arn | default('') }}"
+          service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+  when: aws_lb_type == "nlb"
+
+- name: Configure for AWS ALB (if using AWS Load Balancer Controller)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: IngressClass
+      metadata:
+        name: alb
+        annotations:
+          ingressclass.kubernetes.io/is-default-class: "false"
+      spec:
+        controller: ingress.k8s.aws/alb
+  when: aws_alb_controller_enabled | default(false)
+
+- name: Create target group binding for AWS
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: elbv2.k8s.aws/v1beta1
+      kind: TargetGroupBinding
+      metadata:
+        name: ingress-nginx-tgb
+        namespace: "{{ ingress_namespace }}"
+      spec:
+        serviceRef:
+          name: ingress-nginx-controller
+          port: 80
+        targetGroupARN: "{{ aws_target_group_arn | default('') }}"
+        targetType: ip
+  when: 
+    - aws_target_group_arn is defined
+    - aws_target_group_arn != ""
+
+- name: Configure Security Group for NLB
+  amazon.aws.ec2_security_group_rule:
+    group_id: "{{ node_security_group_id }}"
+    rule_desc: "Allow traffic from NLB"
+    proto: tcp
+    from_port: "{{ item }}"
+    to_port: "{{ item }}"
+    cidr_ip: "0.0.0.0/0"
+  loop:
+    - 80
+    - 443
+    - 10254  # Health check port
+  when: configure_security_groups | default(false)
+  
